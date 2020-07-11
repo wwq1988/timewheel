@@ -14,7 +14,7 @@ func TestTimeWheel(t *testing.T) {
 	ch := make(chan string)
 	expected := "hello"
 	task := &Task{
-		Id: "test",
+		ID: "test",
 		Cmd: func() {
 			ch <- expected
 		},
