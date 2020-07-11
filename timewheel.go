@@ -10,6 +10,7 @@ const (
 	timeout = time.Second * 3
 )
 
+// TimeWheel TimeWheel
 type TimeWheel struct {
 	slots    []*list.List
 	interval time.Duration
@@ -27,18 +28,21 @@ type TimeWheel struct {
 	sync.RWMutex
 }
 
+// Task Task
 type Task struct {
 	Delay     time.Duration
-	Id        string
+	ID        string
 	Cmd       func()
 	circle    int64
 	remainder int64
 }
 
+// New New
 func New(slot int64, interval time.Duration) *TimeWheel {
 	return NewLeveled(1, slot, interval)
 }
 
+// NewLeveled NewLeveled
 func NewLeveled(level, slot int64, interval time.Duration) *TimeWheel {
 	var prev *TimeWheel
 	var tw *TimeWheel
@@ -73,6 +77,7 @@ func newTimeWheel(slot int64, interval time.Duration) *TimeWheel {
 		doneCh:   make(chan struct{}),
 		ticker:   time.NewTicker(interval),
 		total:    time.Duration(slot) * interval,
+		id2Pos:   make(map[string]int64),
 	}
 
 	for i := int64(0); i < slot; i++ {
@@ -81,6 +86,7 @@ func newTimeWheel(slot int64, interval time.Duration) *TimeWheel {
 	return ltw
 }
 
+// Start Start
 func (tw *TimeWheel) Start() {
 	child := tw.child
 	if child != nil {
@@ -150,6 +156,7 @@ func (tw *TimeWheel) addHandler(task *Task) {
 	task.circle = circle
 	task.remainder = remainder
 	tw.slots[pos].PushBack(task)
+	tw.id2Pos[task.ID] = pos
 
 }
 func (tw *TimeWheel) delHandler(id string) {
@@ -164,20 +171,23 @@ func (tw *TimeWheel) delHandler(id string) {
 	slot := tw.slots[pos]
 	for e := slot.Front(); e != nil; e = e.Next() {
 		task := e.Value.(*Task)
-		if task.Id == id {
+		if task.ID == id {
 			slot.Remove(e)
 		}
 	}
 }
 
+// Add Add
 func (tw *TimeWheel) Add(task *Task) {
 	tw.addCh <- task
 }
 
+// Del Del
 func (tw *TimeWheel) Del(id string) {
 	tw.delCh <- id
 }
 
+// Stop Stop
 func (tw *TimeWheel) Stop() {
 	child := tw.child
 	if child != nil {
