@@ -35,17 +35,6 @@ type Task struct {
 	reAdd     bool
 }
 
-// Executor Executor
-type Executor interface {
-	Exec(task func())
-}
-
-type defaultExecutor struct{}
-
-func (de *defaultExecutor) Exec(task func()) {
-	task()
-}
-
 // Option Option
 type Option func(*TimeWheel)
 
