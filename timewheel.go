@@ -32,7 +32,8 @@ type Task struct {
 	ID        string
 	Cmd       func()
 	circle    int64
-	remainder int64
+	remainder time.Duration
+	reAdd     bool
 }
 
 // Executor Executor
@@ -144,11 +145,11 @@ func (tw *TimeWheel) start() {
 func (tw *TimeWheel) tickerHandler() {
 	if tw.pos == tw.slot-1 {
 		tw.pos = 0
+	} else {
+		tw.pos++
 	}
-	tw.pos++
 
 	slot := tw.slots[tw.pos]
-
 	for e := slot.Front(); e != nil; e = e.Next() {
 		task := e.Value.(*Task)
 		if task.circle > 0 {
@@ -156,6 +157,7 @@ func (tw *TimeWheel) tickerHandler() {
 			continue
 		}
 		if task.remainder != 0 && tw.parent != nil {
+			task.reAdd = true
 			tw.parent.Add(task)
 			continue
 		}
@@ -164,7 +166,7 @@ func (tw *TimeWheel) tickerHandler() {
 	}
 }
 
-func (tw *TimeWheel) getPostAndCircleAndRemainder(delay time.Duration) (int64, int64, int64) {
+func (tw *TimeWheel) getPostAndCircleAndRemainder(delay time.Duration) (int64, int64, time.Duration) {
 	delaySeconds := int64(delay.Seconds())
 	intervalSeconds := int64(tw.interval.Seconds())
 	circle := delaySeconds / (intervalSeconds * tw.slot)
@@ -172,19 +174,22 @@ func (tw *TimeWheel) getPostAndCircleAndRemainder(delay time.Duration) (int64, i
 	remainderAll := delaySeconds - tw.slot*circle*intervalSeconds
 	pos := remainderAll / intervalSeconds
 	remainder := remainderAll % intervalSeconds
-	return pos, circle, remainder
+	return pos, circle, time.Duration(remainder) * time.Second
 }
 
 func (tw *TimeWheel) addHandler(task *Task) {
 	delay := task.Delay
+	if task.reAdd {
+		delay = task.remainder
+	}
 
-	if task.Delay > tw.total && tw.child != nil {
+	if delay > tw.total && tw.child != nil {
 		tw.child.Add(task)
 		return
 	}
-
 	pos, circle, remainder := tw.getPostAndCircleAndRemainder(delay)
 	task.circle = circle
+
 	task.remainder = remainder
 	tw.slots[pos].PushBack(task)
 	tw.id2Pos[task.ID] = pos

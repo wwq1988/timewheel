@@ -6,8 +6,7 @@ import (
 )
 
 func TestTimeWheel(t *testing.T) {
-
-	tw := NewLeveled(2, 3, time.Second)
+	tw := NewLeveled(2, 2, time.Second)
 
 	tw.Start()
 
@@ -18,12 +17,12 @@ func TestTimeWheel(t *testing.T) {
 		Cmd: func() {
 			ch <- expected
 		},
-		Delay: time.Second * 2,
+		Delay: time.Second * 5,
 	}
 	tw.Add(task)
 
 	select {
-	case <-time.After(time.Second * 3):
+	case <-time.After(time.Second * 7):
 		t.Errorf("got no data")
 	case got := <-ch:
 		if got != expected {
