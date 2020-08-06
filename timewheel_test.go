@@ -17,12 +17,12 @@ func TestTimeWheel(t *testing.T) {
 		Cmd: func() {
 			ch <- expected
 		},
-		Delay: time.Second * 5,
+		Delay: time.Second * 3,
 	}
 	tw.Add(task)
 
 	select {
-	case <-time.After(time.Second * 7):
+	case <-time.After(time.Second * 4):
 		t.Errorf("got no data")
 	case got := <-ch:
 		if got != expected {

@@ -19,7 +19,6 @@ type TimeWheel struct {
 	addCh    chan *Task
 	delCh    chan string
 	doneCh   chan struct{}
-	ticker   *time.Ticker
 	id2Pos   map[string]int64
 	wg       *sync.WaitGroup
 	executor Executor
@@ -74,7 +73,7 @@ func NewLeveled(level, slot int64, interval time.Duration, opts ...Option) *Time
 		if prev == nil {
 			cur = newTimeWheel(slot, interval, opts...)
 		} else {
-			cur = newTimeWheel(slot, prev.total*time.Duration(slot), opts...)
+			cur = newTimeWheel(slot, prev.total, opts...)
 		}
 		cur.parent = prev
 		cur.level = curLevel
@@ -99,7 +98,6 @@ func newTimeWheel(slot int64, interval time.Duration, opts ...Option) *TimeWheel
 		addCh:    make(chan *Task),
 		delCh:    make(chan string),
 		doneCh:   make(chan struct{}),
-		ticker:   time.NewTicker(interval),
 		total:    time.Duration(slot) * interval,
 		id2Pos:   make(map[string]int64),
 		executor: &defaultExecutor{},
@@ -126,12 +124,15 @@ func (tw *TimeWheel) Start() {
 
 func (tw *TimeWheel) start() {
 	tw.wg.Add(1)
+	ticker := time.NewTicker(tw.interval)
+
 	defer func() {
 		tw.wg.Done()
+		ticker.Stop()
 	}()
 	for {
 		select {
-		case <-tw.ticker.C:
+		case <-ticker.C:
 			tw.tickerHandler()
 		case task := <-tw.addCh:
 			tw.addHandler(task)
@@ -143,6 +144,7 @@ func (tw *TimeWheel) start() {
 	}
 }
 func (tw *TimeWheel) tickerHandler() {
+
 	if tw.pos == tw.slot-1 {
 		tw.pos = 0
 	} else {
@@ -156,8 +158,10 @@ func (tw *TimeWheel) tickerHandler() {
 			task.circle--
 			continue
 		}
+
 		if task.remainder != 0 && tw.parent != nil {
 			task.reAdd = true
+
 			tw.parent.Add(task)
 			continue
 		}
@@ -181,6 +185,10 @@ func (tw *TimeWheel) addHandler(task *Task) {
 	delay := task.Delay
 	if task.reAdd {
 		delay = task.remainder
+	}
+	if delay < tw.interval && tw.parent != nil {
+		tw.parent.Add(task)
+		return
 	}
 
 	if delay > tw.total && tw.child != nil {
