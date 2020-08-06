@@ -21,6 +21,8 @@ type TimeWheel struct {
 	doneCh   chan struct{}
 	ticker   *time.Ticker
 	id2Pos   map[string]int64
+	wg       *sync.WaitGroup
+	executor Executor
 	sync.RWMutex
 }
 
@@ -33,24 +35,49 @@ type Task struct {
 	remainder int64
 }
 
+// Executor Executor
+type Executor interface {
+	Exec(task func())
+}
+
+type defaultExecutor struct{}
+
+func (de *defaultExecutor) Exec(task func()) {
+	task()
+}
+
+// Option Option
+type Option func(*TimeWheel)
+
+// Options Options
+
+// WithExecutor WithExecutor
+func WithExecutor(executor Executor) Option {
+	return func(tw *TimeWheel) {
+		tw.executor = executor
+	}
+}
+
 // New New
-func New(slot int64, interval time.Duration) *TimeWheel {
-	return NewLeveled(1, slot, interval)
+func New(slot int64, interval time.Duration, opts ...Option) *TimeWheel {
+	return NewLeveled(1, slot, interval, opts...)
 }
 
 // NewLeveled NewLeveled
-func NewLeveled(level, slot int64, interval time.Duration) *TimeWheel {
+func NewLeveled(level, slot int64, interval time.Duration, opts ...Option) *TimeWheel {
 	var prev *TimeWheel
 	var tw *TimeWheel
+	wg := &sync.WaitGroup{}
 	for curLevel := int64(0); curLevel < level; curLevel++ {
 		var cur *TimeWheel
 		if prev == nil {
-			cur = newTimeWheel(slot, interval)
+			cur = newTimeWheel(slot, interval, opts...)
 		} else {
-			cur = newTimeWheel(slot, prev.total*time.Duration(slot))
+			cur = newTimeWheel(slot, prev.total*time.Duration(slot), opts...)
 		}
 		cur.parent = prev
 		cur.level = curLevel
+		cur.wg = wg
 		if prev != nil {
 			prev.child = cur
 		}
@@ -63,7 +90,7 @@ func NewLeveled(level, slot int64, interval time.Duration) *TimeWheel {
 	return tw
 }
 
-func newTimeWheel(slot int64, interval time.Duration) *TimeWheel {
+func newTimeWheel(slot int64, interval time.Duration, opts ...Option) *TimeWheel {
 	ltw := &TimeWheel{
 		slots:    make([]*list.List, slot),
 		interval: interval,
@@ -74,6 +101,10 @@ func newTimeWheel(slot int64, interval time.Duration) *TimeWheel {
 		ticker:   time.NewTicker(interval),
 		total:    time.Duration(slot) * interval,
 		id2Pos:   make(map[string]int64),
+		executor: &defaultExecutor{},
+	}
+	for _, opt := range opts {
+		opt(ltw)
 	}
 
 	for i := int64(0); i < slot; i++ {
@@ -93,6 +124,10 @@ func (tw *TimeWheel) Start() {
 }
 
 func (tw *TimeWheel) start() {
+	tw.wg.Add(1)
+	defer func() {
+		tw.wg.Done()
+	}()
 	for {
 		select {
 		case <-tw.ticker.C:
@@ -122,8 +157,9 @@ func (tw *TimeWheel) tickerHandler() {
 		}
 		if task.remainder != 0 && tw.parent != nil {
 			tw.parent.Add(task)
+			continue
 		}
-		task.Cmd()
+		tw.executor.Exec(task.Cmd)
 		slot.Remove(e)
 	}
 }
@@ -193,4 +229,14 @@ func (tw *TimeWheel) Stop() {
 		child.Stop()
 	}
 	close(tw.doneCh)
+}
+
+// GracefulStop GracefulStop
+func (tw *TimeWheel) GracefulStop() {
+	child := tw.child
+	if child != nil {
+		child.Stop()
+	}
+	close(tw.doneCh)
+	tw.wg.Wait()
 }
