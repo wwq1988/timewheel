@@ -6,10 +6,6 @@ import (
 	"time"
 )
 
-const (
-	timeout = time.Second * 3
-)
-
 // TimeWheel TimeWheel
 type TimeWheel struct {
 	slots    []*list.List
@@ -91,7 +87,6 @@ func (tw *TimeWheel) Start() {
 	child := tw.child
 	if child != nil {
 		child.Start()
-
 	}
 
 	go tw.start()
@@ -160,7 +155,6 @@ func (tw *TimeWheel) addHandler(task *Task) {
 
 }
 func (tw *TimeWheel) delHandler(id string) {
-
 	if tw.parent != nil {
 		tw.parent.delCh <- id
 	}
@@ -169,11 +163,16 @@ func (tw *TimeWheel) delHandler(id string) {
 		return
 	}
 	slot := tw.slots[pos]
+	var found bool
 	for e := slot.Front(); e != nil; e = e.Next() {
 		task := e.Value.(*Task)
 		if task.ID == id {
 			slot.Remove(e)
+			found = true
 		}
+	}
+	if !found {
+		tw.child.Del(id)
 	}
 }
 
