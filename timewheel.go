@@ -150,7 +150,6 @@ func (tw *TimeWheel) tickerHandler() {
 
 		if task.remainder != 0 && tw.parent != nil {
 			task.reAdd = true
-
 			tw.parent.Add(task)
 			continue
 		}
@@ -181,7 +180,7 @@ func (tw *TimeWheel) addHandler(task *Task) {
 	}
 
 	if delay > tw.total && tw.child != nil {
-		tw.child.Add(task)
+		go tw.child.Add(task)
 		return
 	}
 	pos, circle, remainder := tw.getPostAndCircleAndRemainder(delay)
@@ -210,7 +209,7 @@ func (tw *TimeWheel) delHandler(id string) {
 		}
 	}
 	if !found {
-		tw.child.Del(id)
+		go tw.child.Del(id)
 	}
 }
 
